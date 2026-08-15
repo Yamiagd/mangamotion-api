@@ -1,0 +1,17 @@
+async function cutBackgroundAI() {
+  const data = layers[currentLayerIndex].data;
+  if (!data) return;
+  const base64 = imageDataToBase64(data); // need to implement this helper
+  const response = await fetch('/api/cut-bg', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: base64 })
+  });
+  const result = await response.json();
+  if (result.success) {
+    const newData = await base64ToImageData(result.data);
+    layers[currentLayerIndex].data = newData;
+    renderAll();
+    updateLayerUI();
+  }
+}
