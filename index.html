@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>MangaMotion Pro – Better than MangaCut</title>
+  <style>
+    /* ===== RESET & BASE ===== */
+    * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI',Roboto,system-ui,sans-serif; }
+    body {
+      background:#0b0f16; color:#e8edf5; height:100vh; overflow:hidden;
+      display:flex; flex-direction:column;
+    }
+    /* ===== LOADING ===== */
+    #loading-screen {
+      position:fixed; top:0; left:0; width:100%; height:100%;
+      background:#0b0f16; display:flex; flex-direction:column;
+      justify-content:center; align-items:center; z-index:9999;
+      transition:opacity 1.2s ease;
+    }
+    #loading-screen.hide { opacity:0; pointer-events:none; }
+    #loading-screen h1 {
+      font-weight:300; letter-spacing:6px; color:#b0c4de;
+      font-size:2.8rem; margin-bottom:20px; border-bottom:2px solid #1a2332; padding-bottom:12px;
+    }
+    .loader { width:48px; height:48px; border:4px solid #1a2332; border-top:4px solid #b0c4de; border-radius:50%; animation:spin 0.9s linear infinite; }
+    @keyframes spin { 100% { transform:rotate(360deg); } }
+    .loader-text { margin-top:18px; color:#5a6a82; font-size:0.9rem; letter-spacing:2px; }
+
+    /* ===== APP LAYOUT ===== */
+    #app {
+      display:none; flex-direction:column; height:100vh; width:100vw; background:#0b0f16;
+    }
+    #app.active { display:flex; }
+
+    /* Canvas area */
+    #canvas-wrapper {
+      flex:1; min-height:0; background:#0b0f16; display:flex; justify-content:center; align-items:center;
+      padding:6px; position:relative;
+    }
+    #canvas-container {
+      position:relative; width:100%; height:100%; max-width:100%; max-height:100%;
+      aspect-ratio:16/9; background:#111820; border:1px solid #1a2332;
+      box-shadow:0 0 30px rgba(0,0,0,0.7); overflow:hidden;
+    }
+    #mainCanvas {
+      display:block; width:100%; height:100%; background:#111820; cursor:crosshair;
+    }
+    #selection-overlay { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:10; }
+    #selection-box {
+      position:absolute; border:2px dashed #ffaa66; background:rgba(255,170,102,0.15);
+      display:none; pointer-events:none;
+    }
+
+    /* ===== BOTTOM TOOLBAR (all controls) ===== */
+    #bottom-toolbar {
+      background:#1a2332; border-top:1px solid #2a3a4a; padding:4px 8px;
+      display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px;
+      min-height:52px; max-height:140px; overflow-y:auto; flex-shrink:0;
+    }
+    .tool-group {
+      display:flex; flex-wrap:wrap; align-items:center; gap:3px;
+      background:#0b0f16; border-radius:4px; padding:3px 5px;
+      border:1px solid #2a3a4a;
+    }
+    .tool-group label { font-size:0.5rem; color:#7a8aa2; text-transform:uppercase; letter-spacing:0.5px; margin-right:2px; }
+    .btn {
+      background:#0b0f16; border:1px solid #2a3a4a; color:#e8edf5;
+      padding:3px 7px; font-size:0.7rem; cursor:pointer; border-radius:3px;
+      transition:0.15s; white-space:nowrap;
+    }
+    .btn:hover { background:#2a3a4a; border-color:#b0c4de; }
+    .btn:active { background:#3a4a5a; }
+    .btn.export-btn { background:#1a3a5a; border-color:#3a6a8a; color:#e0f0ff; font-weight:500; }
+    .btn.export-btn:hover { background:#2a5a7a; }
+    .btn.toggle-active { background:#2a4a5a; border-color:#b0c4de; }
+    .btn.warn { background:#4a2a2a; border-color:#6a3a3a; }
+    .sep { width:1px; height:28px; background:#2a3a4a; margin:0 4px; flex-shrink:0; }
+
+    /* timeline mini */
+    #timeline-mini {
+      display:flex; align-items:center; flex:1; min-width:120px; gap:5px;
+    }
+    #timeline-track-container {
+      flex:1; height:22px; background:#0b0f16; border-radius:3px;
+      border:1px solid #2a3a4a; cursor:pointer; position:relative; min-width:60px;
+    }
+    #timeline-track { position:relative; width:100%; height:100%; }
+    .timeline-marker {
+      position:absolute; top:2px; height:calc(100% - 4px); width:2px;
+      background:#4a6a8a; opacity:0.4; pointer-events:none;
+    }
+    .timeline-marker.active-marker { background:#b0c4de; opacity:0.8; width:3px; }
+    #playhead {
+      position:absolute; top:-2px; left:0; width:10px; height:calc(100% + 4px);
+      pointer-events:none; z-index:5;
+    }
+    #playhead::after {
+      content:''; position:absolute; top:-2px; left:3px; width:2px; height:100%;
+      background:#ffaa66; box-shadow:0 0 6px #ffaa66;
+    }
+    #playhead::before {
+      content:'▲'; position:absolute; top:-12px; left:-2px;
+      color:#ffaa66; font-size:10px; text-shadow:0 0 6px #ffaa66;
+    }
+    #playhead-drag-handle {
+      position:absolute; top:0; left:0; width:16px; height:100%;
+      cursor:ew-resize; z-index:10; background:transparent; transform:translateX(-6px);
+    }
+    #time-display { font-size:0.65rem; color:#b0c4de; font-variant-numeric:tabular-nums; min-width:75px; letter-spacing:0.3px; }
+    #frame-counter { font-size:0.6rem; color:#7a8aa2; margin-left:2px; }
+    #export-progress { display:none; font-size:0.7rem; color:#b0c4de; margin-left:4px; }
+    #export-progress.active { display:inline-block; }
+
+    /* Color & size pickers */
+    #colorPicker { width:24px; height:24px; border:1px solid #2a3a4a; border-radius:3px; background:transparent; cursor:pointer; padding:0; }
+    #brushSize { width:50px; background:#0b0f16; border:1px solid #2a3a4a; color:#e8edf5; border-radius:3px; padding:2px 4px; font-size:0.7rem; }
+
+    /* ===== LAYER OVERLAY ===== */
+    #layer-panel-overlay {
+      position:fixed; bottom:0; left:0; right:0;
+      background:#1a2332; border-top:1px solid #2a3a4a;
+      padding:6px 10px; transform:translateY(100%);
+      transition:transform 0.3s ease; z-index:100;
+      max-height:50vh; overflow-y:auto; display:flex; flex-direction:column; gap:4px;
+    }
+    #layer-panel-overlay.visible { transform:translateY(0); }
+    #layer-panel-overlay h3 {
+      font-size:0.7rem; font-weight:300; color:#7a8aa2; letter-spacing:2px;
+      border-bottom:1px solid #2a3a4a; padding-bottom:4px; margin-bottom:4px; text-align:center;
+    }
+    #layerList {
+      display:flex; flex-wrap:wrap; gap:4px;
+    }
+    .layer-item {
+      background:#0b0f16; border:1px solid #2a3a4a; padding:3px 6px;
+      font-size:0.65rem; border-radius:3px; display:flex;
+      align-items:center; gap:4px; color:#b0c4de;
+      cursor:pointer; transition:0.1s;
+    }
+    .layer-item.active { border-color:#b0c4de; background:#1a2a3a; }
+    .layer-item .layer-name { max-width:60px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .layer-item .layer-del { color:#a05060; font-weight:bold; cursor:pointer; padding:0 4px; }
+    .layer-item .layer-del:hover { color:#ff7a8a; }
+    #layer-actions { display:flex; gap:4px; margin-top:4px; flex-wrap:wrap; }
+    #layer-actions .btn { font-size:0.65rem; padding:2px 8px; }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width:700px) {
+      #bottom-toolbar { padding:3px 5px; gap:3px; min-height:44px; }
+      .btn { font-size:0.55rem; padding:2px 5px; }
+      #time-display { font-size:0.55rem; min-width:60px; }
+      #timeline-track-container { height:18px; }
+      #playhead::before { font-size:8px; top:-10px; }
+      #frame-counter { font-size:0.5rem; }
+      .tool-group { padding:2px 4px; }
+      #colorPicker { width:20px; height:20px; }
+      #brushSize { width:40px; font-size:0.6rem; }
+    }
+    @media (max-width:480px) {
+      #bottom-toolbar { flex-wrap:wrap; max-height:160px; }
+      .tool-group { flex-wrap:wrap; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading-screen">
+  <h1>MANGA MOTION PRO</h1>
+  <div class="loader"></div>
+  <div class="loader-text">loading assets ...</div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <!-- Canvas -->
+  <div id="canvas-wrapper">
+    <div id="canvas-container">
+      <canvas id="mainCanvas" width="1600" height="900"></canvas>
+      <div id="selection-overlay"><div id="selection-box"></div></div>
+    </div>
+  </div>
+
+  <!-- BOTTOM TOOLBAR -->
+  <div id="bottom-toolbar">
+    <!-- Drawing tools -->
+    <div class="tool-group">
+      <label>✏️</label>
+      <input type="color" id="colorPicker" value="#ffffff">
+      <input type="number" id="brushSize" value="6" min="1" max="50" step="1">
+      <button class="btn" id="btnEraser">Eraser</button>
+    </div>
+    <div class="sep"></div>
+    <!-- Insert / Keyframe -->
+    <div class="tool-group">
+      <button class="btn" id="btnInsertImage">Insert</button>
+      <button class="btn" id="btnKeyframes">Keyframe</button>
+    </div>
+    <div class="sep"></div>
+    <!-- AI cut/refill -->
+    <div class="tool-group">
+      <label>🧠AI</label>
+      <button class="btn" id="btnAutoCut">Cut BG</button>
+      <button class="btn" id="btnAutoRefill">Refill</button>
+    </div>
+    <div class="sep"></div>
+    <!-- Transform -->
+    <div class="tool-group">
+      <button class="btn" id="btnMoveFrames">Tween</button>
+      <button class="btn" id="btnBodyParts">Skeleton</button>
+    </div>
+    <div class="sep"></div>
+    <!-- Selection -->
+    <div class="tool-group">
+      <button class="btn" id="btnSelectPart">Select</button>
+      <button class="btn" id="btnIsolate">Isolate</button>
+    </div>
+    <div class="sep"></div>
+    <!-- Effects -->
+    <div class="tool-group">
+      <button class="btn" id="btnDroop">Droop</button>
+      <button class="btn" id="btnUndo">Undo</button>
+      <button class="btn" id="btnRedo">Redo</button>
+    </div>
+    <div class="sep"></div>
+    <!-- Layers toggle -->
+    <button class="btn" id="toggleLayers">📋 Layers</button>
+    <!-- Project save/load -->
+    <div class="tool-group">
+      <button class="btn" id="btnSaveProject">💾 Save</button>
+      <button class="btn" id="btnLoadProject">📂 Load</button>
+    </div>
+    <div class="sep"></div>
+    <!-- Play/Export -->
+    <div class="tool-group" style="border-color:#3a6a8a;">
+      <button class="btn" id="playBtn">▶</button>
+      <button class="btn export-btn" id="exportBtn">⬇ Export</button>
+    </div>
+    <!-- Timeline -->
+    <div id="timeline-mini">
+      <span id="time-display">00:00:00</span>
+      <div id="timeline-track-container">
+        <div id="timeline-track">
+          <div id="playhead"><div id="playhead-drag-handle"></div></div>
+        </div>
+      </div>
+      <span id="frame-counter">0/0</span>
+      <span id="export-progress">⏳</span>
+    </div>
+  </div>
+
+  <!-- LAYER OVERLAY -->
+  <div id="layer-panel-overlay">
+    <h3>LAYERS</h3>
+    <div id="layerList"></div>
+    <div id="layer-actions">
+      <button class="btn" id="btnAddLayer">+ Add</button>
+      <button class="btn" id="btnDelLayer">− Del</button>
+      <button class="btn" id="btnMergeDown">Merge Down</button>
+      <button class="btn" id="btnDuplicateLayer">Duplicate</button>
+      <button class="btn" id="closeLayers">✕ Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // =======================================================================
+  // CORE STATE
+  // =======================================================================
+  const canvas = document.getElementById('mainCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = 1600, H = 900;
+  let layers = [];               // {name, data:ImageData, visible, blendMode}
+  let currentLayerIndex = 0;
+  let history = [];
+  let historyIndex = -1;         // for redo
+  let isPlaying = false;
+  let playInterval = null;
+  let playbackMode = false;
+  const frameRate = 24;
+
+  // Drawing state
+  let isDrawing = false;
+  let lastX = 0, lastY = 0;
+  let drawColor = '#ffffff';
+  let drawSize = 6;
+  let isEraser = false;
+
+  // Selection state
+  let selectMode = false;
+  let selStart = null;
+  let selEnd = null;
+  let isSelecting = false;
+
+  // DOM refs
+  const playBtn = document.getElementById('playBtn');
+  const exportBtn = document.getElementById('exportBtn');
+  const timeDisplay = document.getElementById('time-display');
+  const frameCounter = document.getElementById('frame-counter');
+  const trackContainer = document.getElementById('timeline-track-container');
+  const track = document.getElementById('timeline-track');
+  const playhead = document.getElementById('playhead');
+  const dragHandle = document.getElementById('playhead-drag-handle');
+  const exportProgress = document.getElementById('export-progress');
+  const selectionBox = document.getElementById('selection-box');
+  const toggleLayersBtn = document.getElementById('toggleLayers');
+  const layerPanel = document.getElementById('layer-panel-overlay');
+  const closeLayers = document.getElementById('closeLayers');
+  const colorPicker = document.getElementById('colorPicker');
+  const brushSizeInput = document.getElementById('brushSize');
+
+  // =======================================================================
+  // HELPERS
+  // =======================================================================
+  function cloneImageData(imgData) {
+    if (!imgData) return null;
+    const cloned = ctx.createImageData(imgData.width, imgData.height);
+    cloned.data.set(imgData.data);
+    return cloned;
+  }
+  function deepCopyLayers(arr) {
+    return arr.map(l => ({
+      name: l.name,
+      visible: l.visible,
+      blendMode: l.blendMode || 'normal',
+      data: cloneImageData(l.data)
+    }));
+  }
+  function saveHistory() {
+    // remove any future states (redo)
+    history = history.slice(0, historyIndex + 1);
+    history.push(deepCopyLayers(layers));
+    historyIndex = history.length - 1;
+    if (history.length > 50) { history.shift(); historyIndex--; }
+  }
+  function restoreHistory(index) {
+    if (index < 0 || index >= history.length) return;
+    layers = deepCopyLayers(history[index]);
+    if (currentLayerIndex >= layers.length) currentLayerIndex = layers.length - 1;
+    playbackMode = false;
+    updateLayerUI();
+    renderAll();
+  }
+  function undo() {
+    if (historyIndex > 0) {
+      historyIndex--;
+      restoreHistory(historyIndex);
+    }
+  }
+  function redo() {
+    if (historyIndex < history.length - 1) {
+      historyIndex++;
+      restoreHistory(historyIndex);
+    }
+  }
+
+  // =======================================================================
+  // RENDERING
+  // =======================================================================
+  function renderAll() {
+    ctx.clearRect(0, 0, W, H);
+    if (playbackMode) {
+      const layer = layers[currentLayerIndex];
+      if (layer && layer.data) ctx.putImageData(layer.data, 0, 0);
+    } else {
+      for (let i=0; i<layers.length; i++) {
+        const l = layers[i];
+        if (l.visible && l.data) {
+          // blend mode support (basic)
+          if (l.blendMode === 'multiply') {
+            // simple multiply – we composite via temp canvas
+            const temp = ctx.getImageData(0,0,W,H);
+            const src = l.data.data;
+            const dst = temp.data;
+            for (let j=0; j<src.length; j+=4) {
+              if (src[j+3] > 0) {
+                dst[j] = (dst[j] * src[j]) / 255;
+                dst[j+1] = (dst[j+1] * src[j+1]) / 255;
+                dst[j+2] = (dst[j+2] * src[j+2]) / 255;
+                dst[j+3] = Math.min(255, dst[j+3] + src[j+3] - (dst[j+3]*src[j+3])/255);
+              }
+            }
+            ctx.putImageData(temp, 0, 0);
+          } else {
+            ctx.putImageData(l.data, 0, 0);
+          }
+        }
+      }
+    }
+    updateTimelineMarkers();
+    updatePlayheadPosition();
+    updateTimeDisplay();
+    if (selectMode && selStart && selEnd) drawSelectionBox();
+    else selectionBox.style.display = 'none';
+  }
+
+  function renderFrame(index) {
+    ctx.clearRect(0, 0, W, H);
+    const layer = layers[index];
+    if (layer && layer.data) ctx.putImageData(layer.data, 0, 0);
+  }
+
+  // =======================================================================
+  // SELECTION BOX
+  // =======================================================================
+  function drawSelectionBox() {
+    if (!selStart || !selEnd) { selectionBox.style.display = 'none'; return; }
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x1 = Math.min(selStart.x, selEnd.x) / scaleX;
+    const y1 = Math.min(selStart.y, selEnd.y) / scaleY;
+    const x2 = Math.max(selStart.x, selEnd.x) / scaleX;
+    const y2 = Math.max(selStart.y, selEnd.y) / scaleY;
+    const containerRect = document.getElementById('canvas-container').getBoundingClientRect();
+    const left = x1 * rect.width / canvas.width;
+    const top = y1 * rect.height / canvas.height;
+    const width = (x2 - x1) * rect.width / canvas.width;
+    const height = (y2 - y1) * rect.height / canvas.height;
+    selectionBox.style.display = 'block';
+    selectionBox.style.left = left + 'px';
+    selectionBox.style.top = top + 'px';
+    selectionBox.style.width = width + 'px';
+    selectionBox.style.height = height + 'px';
+  }
+
+  // =======================================================================
+  // AI CUT & REFILL (advanced inpainting)
+  // =======================================================================
+  function cutBackgroundAI() {
+    const data = layers[currentLayerIndex].data;
+    if (!data) return;
+    saveHistory();
+    const d = data.data;
+    // detect background using edge sampling
+    const bgR=17, bgG=24, bgB=32, threshold=50;
+    const bgMask = new Uint8Array(d.length/4);
+    for (let i=0; i<d.length; i+=4) {
+      const r=d[i], g=d[i+1], b=d[i+2];
+      if (Math.abs(r-bgR)<threshold && Math.abs(g-bgG)<threshold && Math.abs(b-bgB)<threshold) {
+        bgMask[i/4] = 1;
+      }
+    }
+    for (let i=0; i<d.length; i+=4) {
+      if (bgMask[i/4]) d[i+3] = 0;
+    }
+    // Inpaint with larger radius and edge-aware
+    const copy = new Uint8ClampedArray(d);
+    for (let y=1; y<H-1; y++) {
+      for (let x=1; x<W-1; x++) {
+        const idx = (y*W + x)*4;
+        if (d[idx+3] === 0) {
+          let found = false;
+          for (let radius = 1; radius <= 20; radius++) {
+            let sumR=0, sumG=0, sumB=0, count=0;
+            for (let dy=-radius; dy<=radius; dy++) {
+              for (let dx=-radius; dx<=radius; dx++) {
+                if (dx===0 && dy===0) continue;
+                const nx=x+dx, ny=y+dy;
+                if (nx<0 || nx>=W || ny<0 || ny>=H) continue;
+                const ni=(ny*W + nx)*4;
+                if (copy[ni+3] > 0) {
+                  // weight by distance
+                  const dist = Math.sqrt(dx*dx+dy*dy);
+                  const w = 1/(dist+1);
+                  sumR += copy[ni]*w;
+                  sumG += copy[ni+1]*w;
+                  sumB += copy[ni+2]*w;
+                  count += w;
+                }
+              }
+            }
+            if (count > 0) {
+              d[idx] = sumR / count;
+              d[idx+1] = sumG / count;
+              d[idx+2] = sumB / count;
+              d[idx+3] = 255;
+              found = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+    renderAll();
+    updateLayerUI();
+  }
+
+  function refillMissingAI() {
+    const data = layers[currentLayerIndex].data;
+    if (!data) return;
+    saveHistory();
+    const d = data.data;
+    const copy = new Uint8ClampedArray(d);
+    for (let y=1; y<H-1; y++) {
+      for (let x=1; x<W-1; x++) {
+        const idx = (y*W + x)*4;
+        if (d[idx+3] === 0) {
+          let sumR=0, sumG=0, sumB=0, count=0;
+          for (let radius = 1; radius <= 25; radius++) {
+            for (let dy=-radius; dy<=radius; dy++) {
+              for (let dx=-radius; dx<=radius; dx++) {
+                if (dx===0 && dy===0) continue;
+                const nx=x+dx, ny=y+dy;
+                if (nx<0 || nx>=W || ny<0 || ny>=H) continue;
+                const ni=(ny*W + nx)*4;
+                if (copy[ni+3] > 0) {
+                  const dist = Math.sqrt(dx*dx+dy*dy);
+                  const w = 1/(dist+1);
+                  sumR += copy[ni]*w;
+                  sumG += copy[ni+1]*w;
+                  sumB += copy[ni+2]*w;
+                  count += w;
+                }
+              }
+            }
+            if (count > 0) break;
+          }
+          if (count > 0) {
+            d[idx] = sumR / count;
+            d[idx+1] = sumG / count;
+            d[idx+2] = sumB / count;
+            d[idx+3] = 255;
+          }
+        }
+      }
+    }
+    renderAll();
+    updateLayerUI();
+  }
+
+  // =======================================================================
+  // TIMELINE
+  // =======================================================================
+  function updateTimelineMarkers() {
+    const markers = track.querySelectorAll('.timeline-marker');
+    markers.forEach(m => m.remove());
+    if (layers.length === 0) return;
+    const count = layers.length;
+    for (let i=0; i<count; i++) {
+      const marker = document.createElement('div');
+      marker.className = 'timeline-marker' + (i===currentLayerIndex ? ' active-marker' : '');
+      marker.style.left = (i/(count-1))*100 + '%';
+      track.appendChild(marker);
+    }
+  }
+  function updatePlayheadPosition() {
+    if (layers.length <= 1) { playhead.style.left='0%'; return; }
+    playhead.style.left = (currentLayerIndex/(layers.length-1))*100 + '%';
+  }
+  function updateTimeDisplay() {
+    const total = layers.length;
+    const current = Math.min(currentLayerIndex, total-1);
+    const totalSeconds = total / frameRate;
+    const currentSeconds = current / frameRate;
+    const fmt = (s) => {
+      const hrs = Math.floor(s/3600);
+      const mins = Math.floor((s%3600)/60);
+      const secs = Math.floor(s%60);
+      return `${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+    };
+    timeDisplay.textContent = fmt(currentSeconds);
+    frameCounter.textContent = `${current+1}/${total}`;
+  }
+
+  // Drag timeline
+  let isDragging = false;
+  dragHandle.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    isDragging = true;
+    document.body.style.cursor = 'ew-resize';
+    if (isPlaying) stopPlayback();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const rect = trackContainer.getBoundingClientRect();
+    let x = (e.clientX - rect.left) / rect.width;
+    x = Math.max(0, Math.min(1, x));
+    const idx = Math.round(x * (layers.length - 1));
+    if (idx !== currentLayerIndex && idx >=0 && idx < layers.length) {
+      currentLayerIndex = idx;
+      playbackMode = true;
+      renderAll();
+      updateLayerUI();
+    }
+  });
+  document.addEventListener('mouseup', () => { if (isDragging) { isDragging=false; document.body.style.cursor='default'; } });
+  trackContainer.addEventListener('click', (e) => {
+    if (isDragging) return;
+    if (isPlaying) stopPlayback();
+    const rect = trackContainer.getBoundingClientRect();
+    let x = (e.clientX - rect.left) / rect.width;
+    x = Math.max(0, Math.min(1, x));
+    const idx = Math.round(x * (layers.length - 1));
+    if (idx >=0 && idx < layers.length) {
+      currentLayerIndex = idx;
+      playbackMode = true;
+      renderAll();
+      updateLayerUI();
+    }
+  });
+
+  // =======================================================================
+  // PLAYBACK
+  // =======================================================================
+  function startPlayback() {
+    if (isPlaying) return;
+    if (layers.length < 2) { alert('Need at least 2 layers.'); return; }
+    isPlaying = true;
+    playBtn.textContent = '⏹';
+    playbackMode = true;
+    if (currentLayerIndex >= layers.length) currentLayerIndex = 0;
+    renderAll();
+    let frameIndex = currentLayerIndex;
+    const total = layers.length;
+    playInterval = setInterval(() => {
+      frameIndex = (frameIndex+1) % total;
+      currentLayerIndex = frameIndex;
+      renderAll();
+      updateLayerUI();
+    }, 1000/frameRate);
+  }
+  function stopPlayback() {
+    if (playInterval) { clearInterval(playInterval); playInterval=null; }
+    isPlaying = false;
+    playBtn.textContent = '▶';
+  }
+  function togglePlay() {
+    if (isPlaying) stopPlayback();
+    else startPlayback();
+  }
+  playBtn.addEventListener('click', togglePlay);
+
+  // =======================================================================
+  // EXPORT (MP4 via webm)
+  // =======================================================================
+  async function exportVideo() {
+    if (layers.length < 2) { alert('Need at least 2 layers.'); return; }
+    if (isPlaying) stopPlayback();
+    exportProgress.classList.add('active');
+    exportBtn.disabled = true;
+    exportBtn.textContent = '⏳';
+
+    const totalFrames = layers.length;
+    const stream = canvas.captureStream(frameRate);
+    const recorder = new MediaRecorder(stream, { mimeType:'video/webm;codecs=vp9' });
+    const chunks = [];
+    recorder.ondataavailable = (e) => { if (e.data.size>0) chunks.push(e.data); };
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type:'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'mangamotion_pro_export.webm'; a.click();
+      URL.revokeObjectURL(url);
+      exportProgress.classList.remove('active');
+      exportBtn.disabled = false;
+      exportBtn.textContent = '⬇ Export';
+    };
+    recorder.start();
+    let frameIndex = 0;
+    const startTime = performance.now();
+    return new Promise((resolve) => {
+      function drawNextFrame() {
+        if (frameIndex >= totalFrames) { recorder.stop(); resolve(); return; }
+        renderFrame(frameIndex);
+        currentLayerIndex = frameIndex;
+        updateTimeDisplay();
+        updatePlayheadPosition();
+        updateLayerUI();
+        frameIndex++;
+        const elapsed = (performance.now() - startTime)/1000;
+        const expected = frameIndex / frameRate;
+        const delay = Math.max(0, (expected - elapsed)*1000);
+        setTimeout(drawNextFrame, delay);
+      }
+      setTimeout(drawNextFrame, 0);
+    });
+  }
+  exportBtn.addEventListener('click', exportVideo);
+
+  // =======================================================================
+  // LAYER MANAGEMENT
+  // =======================================================================
+  function addLayer(name, data) {
+    saveHistory();
+    const newData = data || ctx.createImageData(W, H);
+    layers.push({
+      name: name || `Layer ${layers.length+1}`,
+      data: newData,
+      visible: true,
+      blendMode: 'normal'
+    });
+    currentLayerIndex = layers.length - 1;
+    playbackMode = false;
+    updateLayerUI();
+    renderAll();
+  }
+  function duplicateLayer() {
+    const src = layers[currentLayerIndex];
+    if (!src) return;
+    saveHistory();
+    const newData = cloneImageData(src.data);
+    layers.push({
+      name: src.name + '_copy',
+      data: newData,
+      visible: true,
+      blendMode: src.blendMode || 'normal'
+    });
+    currentLayerIndex = layers.length - 1;
+    playbackMode = false;
+    updateLayerUI();
+    renderAll();
+  }
+  function updateLayerUI() {
+    const list = document.getElementById('layerList');
+    list.innerHTML = '';
+    layers.forEach((layer, idx) => {
+      const div = document.createElement('div');
+      div.className = 'layer-item' + (idx===currentLayerIndex ? ' active' : '');
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'layer-name';
+      nameSpan.textContent = layer.name || `Layer ${idx+1}`;
+      const visSpan = document.createElement('span');
+      visSpan.textContent = layer.visible ? '👁' : '🚫';
+      visSpan.style.cursor = 'pointer';
+      visSpan.style.marginRight = '4px';
+      visSpan.onclick = (e) => {
+        e.stopPropagation();
+        layers[idx].visible = !layers[idx].visible;
+        updateLayerUI();
+        renderAll();
+      };
+      const delSpan = document.createElement('span');
+      delSpan.className = 'layer-del';
+      delSpan.textContent = '✕';
+      delSpan.onclick = (e) => {
+        e.stopPropagation();
+        if (layers.length <= 1) { alert('Cannot delete last layer.'); return; }
+        saveHistory();
+        layers.splice(idx, 1);
+        if (currentLayerIndex >= layers.length) currentLayerIndex = layers.length - 1;
+        if (currentLayerIndex === idx && idx === layers.length) currentLayerIndex--;
+        updateLayerUI();
+        renderAll();
+      };
+      div.appendChild(visSpan);
+      div.appendChild(nameSpan);
+      div.appendChild(delSpan);
+      div.onclick = () => {
+        currentLayerIndex = idx;
+        playbackMode = true;
+        renderAll();
+        updateLayerUI();
+      };
+      list.appendChild(div);
+    });
+    updateTimelineMarkers();
+    updatePlayheadPosition();
+    updateTimeDisplay();
+  }
+  function initLayers() {
+    const blank = ctx.createImageData(W, H);
+    layers = [{ name:'Background', data:blank, visible:true, blendMode:'normal' }];
+    currentLayerIndex = 0;
+    playbackMode = false;
+    history = [];
+    historyIndex = -1;
+    saveHistory();
+    updateLayerUI();
+    renderAll();
+  }
+
+  // =======================================================================
+  // PROJECT SAVE/LOAD (localStorage API)
+  // =======================================================================
+  function saveProject() {
+    try {
+      const project = {
+        layers: layers.map(l => ({
+          name: l.name,
+          visible: l.visible,
+          blendMode: l.blendMode || 'normal',
+          data: Array.from(l.data.data) // convert to array
+        })),
+        currentLayer: currentLayerIndex,
+        frameRate: frameRate
+      };
+      localStorage.setItem('mangamotion_project', JSON.stringify(project));
+      alert('Project saved to localStorage.');
+    } catch(e) { alert('Save failed: '+e.message); }
+  }
+  function loadProject() {
+    try {
+      const raw = localStorage.getItem('mangamotion_project');
+      if (!raw) { alert('No saved project found.'); return; }
+      const project = JSON.parse(raw);
+      saveHistory();
+      layers = project.layers.map(l => {
+        const data = ctx.createImageData(W, H);
+        data.data.set(l.data);
+        return { name:l.name, visible:l.visible, blendMode:l.blendMode||'normal', data };
+      });
+      currentLayerIndex = Math.min(project.currentLayer, layers.length-1);
+      playbackMode = false;
+      updateLayerUI();
+      renderAll();
+      alert('Project loaded from localStorage.');
+    } catch(e) { alert('Load failed: '+e.message); }
+  }
+
+  document.getElementById('btnSaveProject').addEventListener('click', saveProject);
+  document.getElementById('btnLoadProject').addEventListener('click', loadProject);
+
+  // =======================================================================
+  // BUTTON ACTIONS
+  // =======================================================================
+  document.getElementById('btnInsertImage').addEventListener('click', function() {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+          saveHistory();
+          const data = layers[currentLayerIndex].data;
+          if (!data) return;
+          const scaleX = W / img.width, scaleY = H / img.height;
+          const scale = Math.min(scaleX, scaleY, 1);
+          const w = img.width*scale, h = img.height*scale;
+          const dx = (W-w)/2, dy = (H-h)/2;
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = W; tempCanvas.height = H;
+          const tCtx = tempCanvas.getContext('2d');
+          tCtx.drawImage(img, dx, dy, w, h);
+          const tempData = tCtx.getImageData(0,0,W,H);
+          const target = data.data, src = tempData.data;
+          for (let i=0; i<target.length; i+=4) {
+            const aSrc = src[i+3]/255;
+            if (aSrc===0) continue;
+            const aTgt = target[i+3]/255;
+            const outA = aSrc + aTgt*(1-aSrc);
+            if (outA===0) continue;
+            target[i] = (src[i]*aSrc + target[i]*aTgt*(1-aSrc))/outA;
+            target[i+1] = (src[i+1]*aSrc + target[i+1]*aTgt*(1-aSrc))/outA;
+            target[i+2] = (src[i+2]*aSrc + target[i+2]*aTgt*(1-aSrc))/outA;
+            target[i+3] = outA*255;
+          }
+          renderAll();
+          updateLayerUI();
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  });
+
+  document.getElementById('btnKeyframes').addEventListener('click', function() {
+    saveHistory();
+    const composite = ctx.getImageData(0,0,W,H);
+    layers.push({ name:`Keyframe ${layers.length}`, data:composite, visible:true, blendMode:'normal' });
+    currentLayerIndex = layers.length - 1;
+    playbackMode = true;
+    updateLayerUI();
+    renderAll();
+  });
+
+  document.getElementById('btnAutoCut').addEventListener('click', cutBackgroundAI);
+  document.getElementById('btnAutoRefill').addEventListener('click', refillMissingAI);
+
+  document.getElementById('btnMoveFrames').addEventListener('click', function() {
+    saveHistory();
+    const src = layers[currentLayerIndex].data;
+    if (!src) return;
+    const newData = ctx.createImageData(W, H);
+    const srcD = src.data, dstD = newData.data;
+    const shiftX=20, shiftY=10;
+    for (let y=0; y<H; y++) {
+      for (let x=0; x<W; x++) {
+        const sx=x-shiftX, sy=y-shiftY;
+        if (sx<0 || sx>=W || sy<0 || sy>=H) continue;
+        const si=(sy*W+sx)*4, di=(y*W+x)*4;
+        dstD[di]=srcD[si]; dstD[di+1]=srcD[si+1]; dstD[di+2]=srcD[si+2]; dstD[di+3]=srcD[si+3];
+      }
+    }
+    layers.push({ name:`Tween ${layers.length}`, data:newData, visible:true, blendMode:'normal' });
+    currentLayerIndex = layers.length - 1;
+    playbackMode = true;
+    updateLayerUI();
+    renderAll();
+  });
+
+  document.getElementById('btnBodyParts').addEventListener('click', function() {
+    saveHistory();
+    const newData = ctx.createImageData(W, H);
+    const d = newData.data;
+    const cx=W/2, cy=H/2;
+    const headR=40, torsoLen=120, armLen=90, legLen=110;
+    // draw skeleton with lines
+    function drawLine(x1,y1,x2,y2) {
+      const steps = Math.max(Math.abs(x2-x1), Math.abs(y2-y1))*2;
+      for (let t=0; t<=1; t+=1/steps) {
+        const px = x1 + (x2-x1)*t;
+        const py = y1 + (y2-y1)*t;
+        if (px>=0 && px<W && py>=0 && py<H) {
+          const idx = (Math.round(py)*W + Math.round(px))*4;
+          d[idx]=255; d[idx+1]=255; d[idx+2]=255; d[idx+3]=255;
+        }
+      }
+    }
+    // head
+    for (let ang=0; ang<2*Math.PI; ang+=0.05) {
+      const px = cx+headR*Math.cos(ang), py = cy-120+headR*Math.sin(ang);
+      if (px>=0 && px<W && py>=0 && py<H) {
+        const idx=(Math.round(py)*W+Math.round(px))*4;
+        d[idx]=255; d[idx+1]=255; d[idx+2]=255; d[idx+3]=255;
+      }
+    }
+    drawLine(cx, cy-80, cx, cy-80+torsoLen);
+    drawLine(cx, cy-60, cx-armLen, cy-30);
+    drawLine(cx, cy-60, cx+armLen, cy-30);
+    drawLine(cx, cy-80+torsoLen, cx-20, cy-80+torsoLen+legLen);
+    drawLine(cx, cy-80+torsoLen, cx+20, cy-80+torsoLen+legLen);
+    layers.push({ name:'BodyGuide', data:newData, visible:true, blendMode:'normal' });
+    currentLayerIndex = layers.length - 1;
+    playbackMode = true;
+    updateLayerUI();
+    renderAll();
+  });
+
+  document.getElementById('btnDroop').addEventListener('click', function() {
+    const data = layers[currentLayerIndex].data;
+    if (!data) return;
+    saveHistory();
+    const d = data.data;
+    const copy = new Uint8ClampedArray(d);
+    const blur=8;
+    for (let y=0; y<H; y++) {
+      for (let x=0; x<W; x++) {
+        const idx=(y*W+x)*4;
+        let sumR=0, sumG=0, sumB=0, sumA=0, count=0;
+        for (let dy=-blur; dy<=blur; dy++) {
+          const ny=y+dy;
+          if (ny<0 || ny>=H) continue;
+          const ni=(ny*W+x)*4;
+          if (copy[ni+3] > 0) {
+            sumR+=copy[ni]; sumG+=copy[ni+1]; sumB+=copy[ni+2]; sumA+=copy[ni+3]; count++;
+          }
+        }
+        if (count>0) {
+          d[idx]=sumR/count; d[idx+1]=sumG/count; d[idx+2]=sumB/count; d[idx+3]=sumA/count;
+        }
+      }
+    }
+    renderAll();
+    updateLayerUI();
+  });
+
+  document.getElementById('btnUndo').addEventListener('click', undo);
+  document.getElementById('btnRedo').addEventListener('click', redo);
+
+  document.getElementById('btnAddLayer').addEventListener('click', function() { addLayer(`Layer ${layers.length+1}`); });
+  document.getElementById('btnDelLayer').addEventListener('click', function() {
+    if (layers.length <= 1) { alert('Cannot delete last layer.'); return; }
+    saveHistory();
+    layers.splice(currentLayerIndex, 1);
+    if (currentLayerIndex >= layers.length) currentLayerIndex = layers.length-1;
+    playbackMode = false;
+    updateLayerUI();
+    renderAll();
+  });
+  document.getElementById('btnDuplicateLayer').addEventListener('click', duplicateLayer);
+  document.getElementById('btnMergeDown').addEventListener('click', function() {
+    if (currentLayerIndex <= 0) { alert('Already at bottom.'); return; }
+    saveHistory();
+    const below = layers[currentLayerIndex-1];
+    const current = layers[currentLayerIndex];
+    if (!below.data || !current.data) return;
+    const src = current.data.data, dst = below.data.data;
+    for (let i=0; i<src.length; i+=4) {
+      const aSrc = src[i+3]/255;
+      if (aSrc===0) continue;
+      const aDst = dst[i+3]/255;
+      const outA = aSrc + aDst*(1-aSrc);
+      if (outA===0) continue;
+      dst[i] = (src[i]*aSrc + dst[i]*aDst*(1-aSrc))/outA;
+      dst[i+1] = (src[i+1]*aSrc + dst[i+1]*aDst*(1-aSrc))/outA;
+      dst[i+2] = (src[i+2]*aSrc + dst[i+2]*aDst*(1-aSrc))/outA;
+      dst[i+3] = outA*255;
+    }
+    layers.splice(currentLayerIndex, 1);
+    currentLayerIndex = currentLayerIndex - 1;
+    playbackMode = false;
+    updateLayerUI();
+    renderAll();
+  });
+
+  // =======================================================================
+  // SELECTION TOOLS
+  // =======================================================================
+  document.getElementById('btnSelectPart').addEventListener('click', function() {
+    selectMode = !selectMode;
+    this.classList.toggle('toggle-active');
+    if (!selectMode) {
+      selStart = null; selEnd = null;
+      selectionBox.style.display = 'none';
+    }
+    isDrawing = false;
+  });
+
+  document.getElementById('btnIsolate').addEventListener('click', function() {
+    if (!selStart || !selEnd) { alert('First select a region using "Select" mode.'); return; }
+    const x1 = Math.min(selStart.x, selEnd.x);
+    const y1 = Math.min(selStart.y, selEnd.y);
+    const x2 = Math.max(selStart.x, selEnd.x);
+    const y2 = Math.max(selStart.y, selEnd.y);
+    if (x2-x1 < 2 || y2-y1 < 2) { alert('Selection too small.'); return; }
+    const srcData = layers[currentLayerIndex].data;
+    if (!srcData) return;
+    saveHistory();
+    const newData = ctx.createImageData(W, H);
+    const src = srcData.data, dst = newData.data;
+    for (let y = y1; y <= y2; y++) {
+      for (let x = x1; x <= x2; x++) {
+        const si = (y*W + x)*4, di = (y*W + x)*4;
+        dst[di] = src[si]; dst[di+1] = src[si+1]; dst[di+2] = src[si+2]; dst[di+3] = src[si+3];
+      }
+    }
+    layers.push({ name:`Isolated_${layers.length}`, data:newData, visible:true, blendMode:'normal' });
+    currentLayerIndex = layers.length - 1;
+    playbackMode = true;
+    selStart = null; selEnd = null;
+    selectMode = false;
+    document.getElementById('btnSelectPart').classList.remove('toggle-active');
+    updateLayerUI();
+    renderAll();
+    alert('Isolated selection as new layer.');
+  });
+
+  // =======================================================================
+  // SELECTION EVENTS (intercept)
+  // =======================================================================
+  function getCanvasCoords(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const clientX = e.clientX || e.touches?.[0]?.clientX || 0;
+    const clientY = e.clientY || e.touches?.[0]?.clientY || 0;
+    return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+  }
+
+  canvas.addEventListener('mousedown', function(e) {
+    if (selectMode) {
+      e.preventDefault();
+      const pos = getCanvasCoords(e);
+      selStart = { x: pos.x, y: pos.y };
+      selEnd = null;
+      isSelecting = true;
+      return;
+    }
+  });
+  canvas.addEventListener('mousemove', function(e) {
+    if (selectMode && isSelecting && selStart) {
+      e.preventDefault();
+      const pos = getCanvasCoords(e);
+      selEnd = { x: pos.x, y: pos.y };
+      drawSelectionBox();
+      return;
+    }
+  });
+  canvas.addEventListener('mouseup', function(e) {
+    if (selectMode && isSelecting) {
+      e.preventDefault();
+      if (selStart && selEnd) drawSelectionBox();
+      isSelecting = false;
+      return;
+    }
+  });
+  canvas.addEventListener('mouseleave', function() {
+    if (selectMode && isSelecting) isSelecting = false;
+  });
+  canvas.addEventListener('touchstart', function(e) {
+    if (selectMode) {
+      e.preventDefault();
+      const pos = getCanvasCoords(e);
+      selStart = { x: pos.x, y: pos.y };
+      selEnd = null;
+      isSelecting = true;
+      return;
+    }
+  }, { passive: false });
+  canvas.addEventListener('touchmove', function(e) {
+    if (selectMode && isSelecting && selStart) {
+      e.preventDefault();
+      const pos = getCanvasCoords(e);
+      selEnd = { x: pos.x, y: pos.y };
+      drawSelectionBox();
+      return;
+    }
+  }, { passive: false });
+  canvas.addEventListener('touchend', function(e) {
+    if (selectMode && isSelecting) {
+      e.preventDefault();
+      if (selStart && selEnd) drawSelectionBox();
+      isSelecting = false;
+      return;
+    }
+  }, { passive: false });
+
+  // =======================================================================
+  // DRAWING (main)
+  // =======================================================================
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const clientX = e.clientX || e.touches?.[0]?.clientX || 0;
+    const clientY = e.clientY || e.touches?.[0]?.clientY || 0;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+    return { x: Math.min(Math.max(x,0),W-1), y: Math.min(Math.max(y,0),H-1) };
+  }
+
+  function startDraw(e) {
+    if (selectMode) return;
+    e.preventDefault();
+    const pos = getPos(e);
+    isDrawing = true;
+    lastX = pos.x; lastY = pos.y;
+    saveHistory();
+  }
+  function draw(e) {
+    if (selectMode) return;
+    e.preventDefault();
+    if (!isDrawing) return;
+    const pos = getPos(e);
+    const data = layers[currentLayerIndex].data;
+    if (!data) return;
+    const d = data.data;
+    const radius = drawSize/2;
+    let r,g,b,a;
+    if (isEraser) {
+      r=0; g=0; b=0; a=0;
+    } else {
+      const col = colorPicker.value;
+      r = parseInt(col.slice(1,3),16);
+      g = parseInt(col.slice(3,5),16);
+      b = parseInt(col.slice(5,7),16);
+      a = 255;
+    }
+    const steps = Math.max(Math.abs(pos.x-lastX), Math.abs(pos.y-lastY)) * 2;
+    for (let t=0; t<=1; t += (steps>0 ? 1/steps : 1)) {
+      const x = lastX + (pos.x-lastX)*t;
+      const y = lastY + (pos.y-lastY)*t;
+      for (let dy=-radius; dy<=radius; dy++) {
+        for (let dx=-radius; dx<=radius; dx++) {
+          const dist = Math.sqrt(dx*dx+dy*dy);
+          if (dist > radius) continue;
+          const px = Math.round(x+dx);
+          const py = Math.round(y+dy);
+          if (px<0 || px>=W || py<0 || py>=H) continue;
+          const idx = (py*W+px)*4;
+          if (isEraser) {
+            d[idx+3] = 0;
+          } else {
+            const alpha = 255 * (1 - dist/radius);
+            d[idx] = (d[idx]*(1-alpha/255) + r*(alpha/255));
+            d[idx+1] = (d[idx+1]*(1-alpha/255) + g*(alpha/255));
+            d[idx+2] = (d[idx+2]*(1-alpha/255) + b*(alpha/255));
+            d[idx+3] = Math.min(255, d[idx+3] + alpha);
+          }
+        }
+      }
+    }
+    lastX = pos.x; lastY = pos.y;
+    renderAll();
+  }
+  function endDraw(e) { isDrawing = false; }
+
+  canvas.addEventListener('mousedown', startDraw);
+  canvas.addEventListener('mousemove', draw);
+  canvas.addEventListener('mouseup', endDraw);
+  canvas.addEventListener('mouseleave', endDraw);
+  canvas.addEventListener('touchstart', startDraw);
+  canvas.addEventListener('touchmove', draw);
+  canvas.addEventListener('touchend', endDraw);
+
+  // Eraser toggle
+  document.getElementById('btnEraser').addEventListener('click', function() {
+    isEraser = !isEraser;
+    this.classList.toggle('toggle-active');
+    this.textContent = isEraser ? 'Eraser ON' : 'Eraser';
+  });
+
+  // Color and size
+  colorPicker.addEventListener('input', function() { drawColor = this.value; });
+  brushSizeInput.addEventListener('change', function() { drawSize = Math.max(1, parseInt(this.value)||6); });
+
+  // =======================================================================
+  // LAYER PANEL TOGGLE
+  // =======================================================================
+  toggleLayersBtn.addEventListener('click', function() { layerPanel.classList.toggle('visible'); });
+  closeLayers.addEventListener('click', function() { layerPanel.classList.remove('visible'); });
+
+  // =======================================================================
+  // INIT
+  // =======================================================================
+  setTimeout(function() {
+    document.getElementById('loading-screen').classList.add('hide');
+    document.getElementById('app').classList.add('active');
+    initLayers();
+    drawColor = '#ffffff';
+    drawSize = 6;
+    colorPicker.value = '#ffffff';
+    brushSizeInput.value = 6;
+    updateTimelineMarkers();
+    updatePlayheadPosition();
+    updateTimeDisplay();
+    // Save initial history
+    saveHistory();
+    // resize observer for selection
+    window.addEventListener('resize', function() {
+      if (selectMode && selStart && selEnd) drawSelectionBox();
+    });
+  }, 1500);
+
+  // =======================================================================
+  // API-LIKE: expose some functions for external scripting
+  // =======================================================================
+  window.MangaMotion = {
+    getLayers: () => layers,
+    getCurrentLayer: () => currentLayerIndex,
+    addLayer: addLayer,
+    exportVideo: exportVideo,
+    undo: undo,
+    redo: redo,
+    saveProject: saveProject,
+    loadProject: loadProject
+  };
+  console.log('MangaMotion Pro loaded. API available at window.MangaMotion');
+
+})();
+</script>
+</body>
+</html>
