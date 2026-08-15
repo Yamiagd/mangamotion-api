@@ -1,17 +1,15 @@
-async function cutBackgroundAI() {
-  const data = layers[currentLayerIndex].data;
-  if (!data) return;
-  const base64 = imageDataToBase64(data); // need to implement this helper
-  const response = await fetch('/api/cut-bg', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image: base64 })
-  });
-  const result = await response.json();
-  if (result.success) {
-    const newData = await base64ToImageData(result.data);
-    layers[currentLayerIndex].data = newData;
-    renderAll();
-    updateLayerUI();
+{
+  "name": "mangamotion-api",
+  "version": "1.0.0",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
+    "cors": "^2.8.5",
+    "canvas": "^2.11.2"
   }
 }
